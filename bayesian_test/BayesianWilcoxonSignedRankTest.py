@@ -56,6 +56,19 @@ def rdirichlet(alpha: np.ndarray, size: int) -> np.ndarray:
     """
     return dirichlet(alpha).rvs(size)
 
+def heaviside_half(x: np.ndarray, tol: float = 1e-12) -> np.ndarray:
+    """
+    Heaviside function with H(0) = 0.5, as required by Benavoli et al.
+
+    :param x: Input array; typically pairwise sums z_i + z_j.
+    :param tol: Absolute tolerance for the tie region |x| <= tol. Defaults to 1e-12.
+    :return: Float array of the same shape as x with values in {0, 0.5, 1}.
+    """
+    out = np.zeros_like(x, dtype=float)
+    out[x > tol] = 1.0
+    out[np.abs(x) <= tol] = 0.5
+    return out
+
 
 class BayesianWilcoxonSignedRankTest(AbstractBayesian):
     def __init__(self, y1: np.ndarray, y2: np.ndarray, rope: Optional[tuple[float, float]], s: float = 0.5,
@@ -160,12 +173,12 @@ class BayesianWilcoxonSignedRankTest(AbstractBayesian):
 
         # Get the elements to be summed for each event
         if self.rope is not None:
-            left_matrix = x_matrix < 2 * self.rope[0]
-            right_matrix = x_matrix > 2 * self.rope[1]
-            rope_matrix = (x_matrix >= 2 * self.rope[0]) & (x_matrix <= 2 * self.rope[1])
+            left_matrix = heaviside_half(2 * self.rope[0] - x_matrix)
+            right_matrix = heaviside_half(x_matrix - 2 * self.rope[1])
+            rope_matrix = np.clip(1.0 - left_matrix - right_matrix, 0.0, 1.0)
         else:
-            right_matrix = x_matrix > 0
-            left_matrix = x_matrix < 0
+            right_matrix = heaviside_half(x_matrix)
+            left_matrix = heaviside_half(-x_matrix)
             rope_matrix = None
 
         # Calculate the posterior for each sample
